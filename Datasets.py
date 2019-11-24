@@ -270,68 +270,159 @@ def getMUSDB(database_path):
             print("Maximum absolute deviation from source additivity constraint: " + str(np.max(diff_signal)))# Check if acc+vocals=mix
             print("Mean absolute deviation from source additivity constraint:    " + str(np.mean(diff_signal)))
 
+            print(paths)
             samples.append(paths)
 
         subsets.append(samples)
 
+    print(subsets)
     return subsets
 
 def getSATB(database_path):
 
-    subsets = list()
+    tracks = list()
 
-    for subset in ["train", "test"]:
-        tracks = mus.load_mus_tracks(subset)
-        samples = list()
+    # Create new directory for mixes in doesn't exist yet
+    mixDir = database_path+"/mixes"
+    if not os.path.isdir(mixDir):
+        os.mkdir(mixDir)
 
-        # Go through tracks
-        for track in tracks:
-            # Skip track if mixture is already written, assuming this track is done already
-            track_path = track.path[:-4]
-            mix_path = track_path + "_mix.wav"
-            acc_path = track_path + "_accompaniment.wav"
+    # Get all the stem files
+    tracks = glob.glob(database_path+"/*.wav")
+
+    songs = ['ND','LI','ER']
+
+    parts = {
+        'soprano':[''],
+        'alto':[''],
+        'tenor':[''],
+        'bass':[''],}
+
+    stemVariations = {
+        songs[0]:[],
+        songs[1]:[],
+        songs[2]:[]}
+
+    # Copy parts as new dict for each songs. T
+    # Track names are expected to be in the following format: CSD_SongName_PartName_Part#.wav
+    allParts = {
+        songs[0]:copy.deepcopy(parts),
+        songs[1]:copy.deepcopy(parts),
+        songs[2]:copy.deepcopy(parts)}
+
+    # DISTRIBUTE ALL STEMS TO THEIR RESPECTIVE SONG DICT
+    for track in tracks:
+        filename = os.path.splitext(os.path.basename(track))[0].split('_')
+        song = filename[1]
+        part = filename[2]
+
+        allParts[song][part].append(track)
+
+    for song in songs:
+
+        # Get current songs
+        currentSong = allParts[song]
+
+        # Create all possible permutations of song's stems (at most 1 voice per sectin = 624 variations)
+        stemVariations[song] = [[i, j, k, l] for i in currentSong['soprano']  
+                                for j in currentSong['alto']
+                                for k in currentSong['tenor']
+                                for l in currentSong['bass']] 
+        
+        # Remove the only empty one
+        stemVariations[song].remove(['','','',''])
+
+        # Loop through all the variations and create mixdown if needed
+        for i, variation in enumerate(stemVariations[song]):
+
+            mix_path = ''
+            print('Creating Variations for Song: '+song+ ' --> '+str(i)+' of '+str(len(stemVariations[song])))
+
+            # Getting rid of all the empty paths
+            variation = list(filter(None, variation))
+            # Sort paths by alphabetical order
+            variation.sort(key=lambda x: os.path.splitext(os.path.basename(x))[0].split('_')[2][0])
+            #Create new path of current variation
+            mix_path = [os.path.splitext(os.path.basename(part))[0].split('_')[2][0]+
+                        os.path.splitext(os.path.basename(part))[0].split('_')[3][0]
+                        for part in variation]
+            mix_path = ''.join(mix_path)
+            mix_path = mixDir+'/'+song+'_'+mix_path+".wav"
+
             if os.path.exists(mix_path):
                 print("WARNING: Skipping track " + mix_path + " since it exists already")
-
-                # Add paths and then skip
-                paths = {"mix" : mix_path, "accompaniment" : acc_path}
-                paths.update({key : track_path + "_" + key + ".wav" for key in ["bass", "drums", "other", "vocals"]})
-
-                samples.append(paths)
-
                 continue
 
-            rate = track.rate
+            # Create mix
+            fs = 44100
+            mix_audio = []
+            for i, part in enumerate(variation):
+                part_audio,fs = soundfile.read(part)
+                if i == 0:
+                    mix_audio = np.zeros(len(part_audio))
+                # Make sure that all parts are the same length
+                if len(part_audio) > len(mix_audio):
+                    part_audio = part_audio[0:len(mix_audio)]
+                elif len(part_audio) < len(mix_audio):
+                    part_audio = np.pad(part_audio,(0,np.abs(len(mix_audio)-len(part_audio))),'constant', constant_values=(0))
 
-            # Go through each instrument
-            paths = dict()
-            stem_audio = dict()
-            for stem in ["bass", "drums", "other", "vocals"]:
-                path = track_path + "_" + stem + ".wav"
-                audio = track.targets[stem].audio
-                soundfile.write(path, audio, rate, "PCM_16")
-                stem_audio[stem] = audio
-                paths[stem] = path
+                # Adf stem to mix
+                mix_audio = np.add(mix_audio,part_audio)
 
-            # Add other instruments to form accompaniment
-            acc_audio = np.clip(sum([stem_audio[key] for key in list(stem_audio.keys()) if key != "vocals"]), -1.0, 1.0)
-            soundfile.write(acc_path, acc_audio, rate, "PCM_16")
-            paths["accompaniment"] = acc_path
+            mix_audio /= len(variation)
 
-            # Create mixture
-            mix_audio = track.audio
-            soundfile.write(mix_path, mix_audio, rate, "PCM_16")
-            paths["mix"] = mix_path
+            with soundfile.SoundFile(mix_path, 'x+', fs, 1, "PCM_16") as myfile:
+                myfile.write(mix_audio)
+            myfile.closed
 
-            diff_signal = np.abs(mix_audio - acc_audio - stem_audio["vocals"])
-            print("Maximum absolute deviation from source additivity constraint: " + str(np.max(diff_signal)))# Check if acc+vocals=mix
-            print("Mean absolute deviation from source additivity constraint:    " + str(np.mean(diff_signal)))
+    # Go through stems
+    # for track in tracks:
+    #     # Skip track if mixture is already written, assuming this track is done already
+    #     track_path = track.path[:-4]
+    #     mix_path = track_path + "_mix.wav"
+    #     acc_path = track_path + "_accompaniment.wav"
+    #     if os.path.exists(mix_path):
+    #         print("WARNING: Skipping track " + mix_path + " since it exists already")
 
-            samples.append(paths)
+    #         # Add paths and then skip
+    #         paths = {"mix" : mix_path, "accompaniment" : acc_path}
+    #         paths.update({key : track_path + "_" + key + ".wav" for key in ["bass", "drums", "other", "vocals"]})
 
-        subsets.append(samples)
+    #         samples.append(paths)
 
-    return subsets
+    #         continue
+
+    #     rate = track.rate
+
+    #     # Go through each instrument
+    #     paths = dict()
+    #     stem_audio = dict()
+    #     for stem in ["bass", "drums", "other", "vocals"]:
+    #         path = track_path + "_" + stem + ".wav"
+    #         audio = track.targets[stem].audio
+    #         soundfile.write(path, audio, rate, "PCM_16")
+    #         stem_audio[stem] = audio
+    #         paths[stem] = path
+
+    #     # Add other instruments to form accompaniment
+    #     acc_audio = np.clip(sum([stem_audio[key] for key in list(stem_audio.keys()) if key != "vocals"]), -1.0, 1.0)
+    #     soundfile.write(acc_path, acc_audio, rate, "PCM_16")
+    #     paths["accompaniment"] = acc_path
+
+    #     # Create mixture
+    #     mix_audio = track.audio
+    #     soundfile.write(mix_path, mix_audio, rate, "PCM_16")
+    #     paths["mix"] = mix_path
+
+    #     diff_signal = np.abs(mix_audio - acc_audio - stem_audio["vocals"])
+    #     print("Maximum absolute deviation from source additivity constraint: " + str(np.max(diff_signal)))# Check if acc+vocals=mix
+    #     print("Mean absolute deviation from source additivity constraint:    " + str(np.mean(diff_signal)))
+
+    #     samples.append(paths)
+
+    # subsets.append(samples)
+
+    # return subsets
 
 def getCCMixter(xml_path):
     tree = etree.parse(xml_path)
