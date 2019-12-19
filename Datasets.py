@@ -326,23 +326,24 @@ def SATBBatchGenerator(hdf5_filepath, batch_size, num_frames):
     out_shapes = {'soprano':out_shape,'alto':out_shape,'tenor':out_shape,'bass':out_shape, 'mix':out_shape}    
     ls = {}
 
-    for i in range(batch_size):
-        # Get Start and End samples
-        startspl = random.randint(0,len(dataset['soprano1'][randsong]['raw_wav'])-num_frames)
-        endspl   = startspl+num_frames
-        # Get 1-4 Sources
-        randsources = random.sample(sources, random.randint(1,len(sources)))
-        # Retrieve chunks for each selected source and stack them
-        mix_audio = np.zeros(num_frames)
-        for source in randsources:
-            source_num = source+str(random.randint(1,4)) # Add random number to part (1-4)
-            source_chunk = dataset[source_num][randsong]['raw_wav'][startspl:endspl] # Retrieve part's chunk
-            out_shapes[source][i] = source_chunk[..., np.newaxis] # Store chunk in output shapes
-            mix_audio = np.add(mix_audio,source_chunk) # Add the chunk to the mix
-        
-        mix_audio = mix_audio[..., np.newaxis]
-        out_shapes['mix'][i] = (mix_audio/len(randsources)) # Scale down mix
-        yield out_shapes
+    while True:
+        for i in range(batch_size):
+            # Get Start and End samples
+            startspl = random.randint(0,len(dataset['soprano1'][randsong]['raw_wav'])-num_frames)
+            endspl   = startspl+num_frames
+            # Get 1-4 Sources
+            randsources = random.sample(sources, random.randint(1,len(sources)))
+            # Retrieve chunks for each selected source and stack them
+            mix_audio = np.zeros(num_frames)
+            for source in randsources:
+                source_num = source+str(random.randint(1,4)) # Add random number to part (1-4)
+                source_chunk = dataset[source_num][randsong]['raw_wav'][startspl:endspl] # Retrieve part's chunk
+                out_shapes[source][i] = source_chunk[..., np.newaxis] # Store chunk in output shapes
+                mix_audio = np.add(mix_audio,source_chunk) # Add the chunk to the mix
+            
+            mix_audio = mix_audio[..., np.newaxis]
+            out_shapes['mix'][i] = (mix_audio/len(randsources)) # Scale down mix
+            yield out_shapes
 
 
 def getCCMixter(xml_path):

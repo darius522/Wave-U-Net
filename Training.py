@@ -42,7 +42,6 @@ def train(model_config, experiment_id, load_model=None):
         dataset = Datasets.get_dataset(model_config, sep_input_shape, sep_output_shape, partition="train")
         iterator = dataset.make_one_shot_iterator()
         batch = iterator.get_next()
-
     else:
         Datasets.createSATBDataset(model_config["satb_path"],model_config)
 
@@ -52,12 +51,16 @@ def train(model_config, experiment_id, load_model=None):
         out_types = {k: tf.float32 for k in out_shapes}
 
         batchGen = Datasets.SATBBatchGenerator
-        dataset = tf.data.Dataset.from_generator(batchGen, output_types=out_types, output_shapes=out_shapes, args=([model_config["hdf5_filepath"],model_config["batch_size"],model_config["num_frames"]]))
+        dataset = tf.data.Dataset.from_generator(
+            batchGen, 
+            output_types=out_types, 
+            output_shapes=out_shapes, 
+            args=([model_config["hdf5_filepath"],
+                model_config["batch_size"],
+                model_config["num_frames"]]))
         iterator = dataset.make_one_shot_iterator()
         batch = iterator.get_next()
 
-
-    import pdb; pdb.set_trace()
     print("Training...")
     print(batch)
 
@@ -79,6 +82,7 @@ def train(model_config, experiment_id, load_model=None):
             separator_loss += tf.reduce_mean(tf.abs(real_mag - sep_source))
         else:
             separator_loss += tf.reduce_mean(tf.square(real_source - sep_source))
+    breakpoint()
     separator_loss = separator_loss / float(model_config["num_sources"]) # Normalise by number of sources
 
     # TRAINING CONTROL VARIABLES
@@ -90,15 +94,18 @@ def train(model_config, experiment_id, load_model=None):
     print("Sep_Vars: " + str(Utils.getNumParams(separator_vars)))
     print("Num of variables" + str(len(tf.global_variables())))
 
+    breakpoint()
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
         with tf.variable_scope("separator_solver"):
             separator_solver = tf.train.AdamOptimizer(learning_rate=model_config["init_sup_sep_lr"]).minimize(separator_loss, var_list=separator_vars)
 
+    breakpoint()
     # SUMMARIES
     tf.summary.scalar("sep_loss", separator_loss, collections=["sup"])
     sup_summaries = tf.summary.merge_all(key='sup')
 
+    breakpoint()
     # Start session and queue input threads
     config = tf.ConfigProto()
     config.gpu_options.allow_growth=True
@@ -106,6 +113,7 @@ def train(model_config, experiment_id, load_model=None):
     sess.run(tf.global_variables_initializer())
     writer = tf.summary.FileWriter(model_config["log_dir"] + os.path.sep + str(experiment_id),graph=sess.graph)
 
+    breakpoint()
     # CHECKPOINTING
     # Load pretrained model to continue training, if we are supposed to
     if load_model != None:
@@ -116,6 +124,7 @@ def train(model_config, experiment_id, load_model=None):
 
     saver = tf.train.Saver(tf.global_variables(), write_version=tf.train.SaverDef.V2)
 
+    breakpoint()
     # Start training loop
     _global_step = sess.run(global_step)
     _init_step = _global_step
@@ -127,6 +136,7 @@ def train(model_config, experiment_id, load_model=None):
         # Increment step counter, check if maximum iterations per epoch is achieved and stop in that case
         _global_step = sess.run(increment_global_step)
 
+    breakpoint()
     # Epoch finished - Save model
     print("Finished epoch!")
     save_path = saver.save(sess, model_config["model_base_dir"] + os.path.sep + str(experiment_id) + os.path.sep + str(experiment_id), global_step=int(_global_step))
