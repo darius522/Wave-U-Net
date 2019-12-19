@@ -12,6 +12,7 @@ import soundfile
 import os
 import tensorflow as tf
 import musdb
+import h5py
 
 def take_random_snippets(sample, keys, input_shape, num_samples):
     # Take a sample (collection of audio files) and extract snippets from it at a number of random positions
@@ -132,6 +133,7 @@ def get_dataset(model_config, input_shape, output_shape, partition):
     main_folder = os.path.join(model_config["data_path"], dataset_name)
 
     if not os.path.exists(main_folder):
+
         # We have to prepare the MUSDB dataset
         print("Preparing MUSDB dataset! This could take a while...")
         dsd_train, dsd_test = getMUSDB(model_config["musdb_path"])  # List of (mix, acc, bass, drums, other, vocal) tuples
@@ -153,6 +155,7 @@ def get_dataset(model_config, input_shape, output_shape, partition):
             print("Preparing CCMixter dataset!")
             ccm = getCCMixter("CCMixter.xml")
             dataset["train"].extend(ccm)
+
 
         # Convert audio files into TFRecords now
 
@@ -270,110 +273,77 @@ def getMUSDB(database_path):
             print("Maximum absolute deviation from source additivity constraint: " + str(np.max(diff_signal)))# Check if acc+vocals=mix
             print("Mean absolute deviation from source additivity constraint:    " + str(np.mean(diff_signal)))
 
-            print(paths)
             samples.append(paths)
 
         subsets.append(samples)
 
-    print(subsets)
     return subsets
 
-def getSATB(database_path):
+def createSATBDataset(database_path, model_config):
 
     tracks = list()
-
-    # Create new directory for mixes in doesn't exist yet
-    mixDir = database_path+"/mixes"
-    if not os.path.isdir(mixDir):
-        os.mkdir(mixDir)
 
     # Get all the stem files
     tracks = glob.glob(database_path+"/*.wav")
 
-    songs = ['ND','LI','ER']
+    h5file = h5py.File(model_config["hdf5_filepath"], "w")
 
-    parts = {
-        'soprano':[''],
-        'alto':[''],
-        'tenor':[''],
-        'bass':[''],}
-
-    stemVariations = {
-        songs[0]:[],
-        songs[1]:[],
-        songs[2]:[]}
-
-    # Copy parts as new dict for each songs. T
-    # Track names are expected to be in the following format: CSD_SongName_PartName_Part#.wav
-    allParts = {
-        songs[0]:copy.deepcopy(parts),
-        songs[1]:copy.deepcopy(parts),
-        songs[2]:copy.deepcopy(parts)}
-
-    # DISTRIBUTE ALL STEMS TO THEIR RESPECTIVE SONG DICT
+    # Write stems to hdf5 file
     for track in tracks:
+
         filename = os.path.splitext(os.path.basename(track))[0].split('_')
+
         song = filename[1]
-        part = filename[2]
+        part = ''.join(filename[2:4])
 
-        allParts[song][part].append(track)
+        # Create group if needed
+        if not str("/"+part) in h5file:
+            grp  = h5file.create_group(part)
 
-    for song in songs:
+        if not str("/"+part+'/'+song) in h5file:
+            grp = h5file[str("/"+part)]
+            subgrp  = grp.create_group(song)
 
-        # Get current songs
-        currentSong = allParts[song]
+        # Once group/subgroup are created, store file
+        audio,fs = soundfile.read(track)
+        subgrp = h5file[str("/"+part+'/'+song)]
+        subgrp.create_dataset("raw_wav",data=audio)
 
-        # Create all possible permutations of song's stems (at most 1 voice per sectin = 624 variations)
-        stemVariations[song] = [[i, j, k, l] for i in currentSong['soprano']  
-                                for j in currentSong['alto']
-                                for k in currentSong['tenor']
-                                for l in currentSong['bass']] 
+    h5file.close()
+
+def SATBBatchGenerator(hdf5_filepath, batch_size, num_frames):
+
+    dataset = h5py.File(hdf5_filepath, "r")
+
+    # 1. Choose random song
+    randsong = random.choice(list(dataset['soprano1'].keys()))
+    sources = ['soprano','alto','tenor','bass']
+
+    startspl = 0
+    endspl   = 0
+
+    out_shape  = np.zeros((batch_size, num_frames,1))
+    out_shapes = {'soprano':out_shape,'alto':out_shape,'tenor':out_shape,'bass':out_shape, 'mix':out_shape}    
+    ls = {}
+
+    for i in range(batch_size):
+        # Get Start and End samples
+        startspl = random.randint(0,len(dataset['soprano1'][randsong]['raw_wav'])-num_frames)
+        endspl   = startspl+num_frames
+        # Get 1-4 Sources
+        randsources = random.sample(sources, random.randint(1,len(sources)))
+        # Retrieve chunks for each selected source and stack them
+        mix_audio = np.zeros(num_frames)
+        for source in randsources:
+            source_num = source+str(random.randint(1,4)) # Add random number to part (1-4)
+            source_chunk = dataset[source_num][randsong]['raw_wav'][startspl:endspl] # Retrieve part's chunk
+            out_shapes[source][i] = source_chunk[..., np.newaxis] # Store chunk in output shapes
+            mix_audio = np.add(mix_audio,source_chunk) # Add the chunk to the mix
         
-        # Remove the only empty one
-        stemVariations[song].remove(['','','',''])
+        mix_audio = mix_audio[..., np.newaxis]
+        out_shapes['mix'][i] = (mix_audio/len(randsources)) # Scale down mix
+        yield out_shapes
 
-        # Loop through all the variations and create mixdown if needed
-        for i, variation in enumerate(stemVariations[song]):
-
-            mix_path = ''
-            print('Creating Variations for Song: '+song+ ' --> '+str(i)+' of '+str(len(stemVariations[song])))
-
-            # Getting rid of all the empty paths
-            variation = list(filter(None, variation))
-            # Sort paths by alphabetical order
-            variation.sort(key=lambda x: os.path.splitext(os.path.basename(x))[0].split('_')[2][0])
-            #Create new path of current variation
-            mix_path = [os.path.splitext(os.path.basename(part))[0].split('_')[2][0]+
-                        os.path.splitext(os.path.basename(part))[0].split('_')[3][0]
-                        for part in variation]
-            mix_path = ''.join(mix_path)
-            mix_path = mixDir+'/'+song+'_'+mix_path+".wav"
-
-            if os.path.exists(mix_path):
-                print("WARNING: Skipping track " + mix_path + " since it exists already")
-                continue
-
-            # Create mix
-            fs = 44100
-            mix_audio = []
-            for i, part in enumerate(variation):
-                part_audio,fs = soundfile.read(part)
-                if i == 0:
-                    mix_audio = np.zeros(len(part_audio))
-                # Make sure that all parts are the same length
-                if len(part_audio) > len(mix_audio):
-                    part_audio = part_audio[0:len(mix_audio)]
-                elif len(part_audio) < len(mix_audio):
-                    part_audio = np.pad(part_audio,(0,np.abs(len(mix_audio)-len(part_audio))),'constant', constant_values=(0))
-
-                # Adf stem to mix
-                mix_audio = np.add(mix_audio,part_audio)
-
-            mix_audio /= len(variation)
-
-            with soundfile.SoundFile(mix_path, 'x+', fs, 1, "PCM_16") as myfile:
-                myfile.write(mix_audio)
-            myfile.closed
 
 def getCCMixter(xml_path):
     tree = etree.parse(xml_path)

@@ -12,7 +12,9 @@ import Test
 import Evaluate
 
 import functools
-from tensorflow.contrib.signal.python.ops import window_ops
+from tensorflow import signal
+import pdb
+import h5py
 
 ex = Experiment('Waveunet Training', ingredients=[config_ingredient])
 
@@ -35,12 +37,29 @@ def train(model_config, experiment_id, load_model=None):
     sep_input_shape, sep_output_shape = separator_class.get_padding(np.array(disc_input_shape))
     separator_func = separator_class.get_output
 
-    # Placeholders and input normalisation
-    dataset = Datasets.get_dataset(model_config, sep_input_shape, sep_output_shape, partition="train")
-    iterator = dataset.make_one_shot_iterator()
-    batch = iterator.get_next()
+    if not model_config["task"] == "satb":
+        # Placeholders and input normalisation
+        dataset = Datasets.get_dataset(model_config, sep_input_shape, sep_output_shape, partition="train")
+        iterator = dataset.make_one_shot_iterator()
+        batch = iterator.get_next()
 
+    else:
+        Datasets.createSATBDataset(model_config["satb_path"],model_config)
+
+        dataset = h5py.File(model_config["hdf5_filepath"], "r")
+        out_shape  = (model_config["batch_size"], model_config["num_frames"],1)
+        out_shapes = {'soprano':out_shape,'alto':out_shape,'tenor':out_shape,'bass':out_shape, 'mix':out_shape}
+        out_types = {k: tf.float32 for k in out_shapes}
+
+        batchGen = Datasets.SATBBatchGenerator
+        dataset = tf.data.Dataset.from_generator(batchGen, output_types=out_types, output_shapes=out_shapes, args=([model_config["hdf5_filepath"],model_config["batch_size"],model_config["num_frames"]]))
+        iterator = dataset.make_one_shot_iterator()
+        batch = iterator.get_next()
+
+
+    import pdb; pdb.set_trace()
     print("Training...")
+    print(batch)
 
     # BUILD MODELS
     # Separator
@@ -51,9 +70,9 @@ def train(model_config, experiment_id, load_model=None):
     for key in model_config["source_names"]:
         real_source = batch[key]
         sep_source = separator_sources[key]
-
+        import pdb; pdb.set_trace()
         if model_config["network"] == "unet_spectrogram" and not model_config["raw_audio_loss"]:
-            window = functools.partial(window_ops.hann_window, periodic=True)
+            window = functools.partial(signal.hann_window, periodic=True)
             stfts = tf.contrib.signal.stft(tf.squeeze(real_source, 2), frame_length=1024, frame_step=768,
                                            fft_length=1024, window_fn=window)
             real_mag = tf.abs(stfts)
