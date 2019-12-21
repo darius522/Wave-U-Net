@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.contrib.signal.python.ops import window_ops
+import tensorflow.contrib.signal as sig
 import numpy as np
 import os
 
@@ -7,6 +7,8 @@ import Datasets
 import Models.UnetSpectrogramSeparator
 import Models.UnetAudioSeparator
 import functools
+
+import h5py
 
 def test(model_config, partition, model_folder, load_model):
     # Determine input and output shapes
@@ -21,11 +23,31 @@ def test(model_config, partition, model_folder, load_model):
     sep_input_shape, sep_output_shape = separator_class.get_padding(np.array(disc_input_shape))
     separator_func = separator_class.get_output
 
-    # Creating the batch generators
-    assert ((sep_input_shape[1] - sep_output_shape[1]) % 2 == 0)
-    dataset = Datasets.get_dataset(model_config, sep_input_shape, sep_output_shape, partition=partition)
-    iterator = dataset.make_one_shot_iterator()
-    batch = iterator.get_next()
+    if not model_config["task"] == "satb":
+        # Creating the batch generators
+        assert ((sep_input_shape[1] - sep_output_shape[1]) % 2 == 0)
+        dataset = Datasets.get_dataset(model_config, sep_input_shape, sep_output_shape, partition=partition)
+        iterator = dataset.make_one_shot_iterator()
+        batch = iterator.get_next()
+    else:
+        Datasets.createSATBDataset(model_config["satb_path"],model_config)
+
+        dataset = h5py.File(model_config["hdf5_filepath"], "r")
+        out_shape  = (model_config["batch_size"], model_config["num_frames"],1)
+        out_shapes = {'soprano':out_shape,'alto':out_shape,'tenor':out_shape,'bass':out_shape, 'mix':out_shape}
+        out_types = {k: tf.float32 for k in out_shapes}
+        use_case = 1 # Change this argument to control number of allowed singer (0:1 at most, 1: 1 at least)
+
+        batchGen = Datasets.SATBBatchGenerator
+        dataset = tf.data.Dataset.from_generator(
+            batchGen, 
+            output_types=out_types, 
+            output_shapes=out_shapes, 
+            args=([model_config["hdf5_filepath"],
+                model_config["batch_size"],
+                model_config["num_frames"],use_case]))
+        iterator = dataset.make_one_shot_iterator()
+        batch = iterator.get_next()
 
     print("Testing...")
 
@@ -61,7 +83,7 @@ def test(model_config, partition, model_folder, load_model):
         sep_source = separator_sources[key]
 
         if model_config["network"] == "unet_spectrogram" and not model_config["raw_audio_loss"]:
-            window = functools.partial(window_ops.hann_window, periodic=True)
+            window = functools.partial(sig.hann_window, periodic=True)
             stfts = tf.contrib.signal.stft(tf.squeeze(real_source, 2), frame_length=1024, frame_step=768,
                                            fft_length=1024, window_fn=window)
             real_mag = tf.abs(stfts)

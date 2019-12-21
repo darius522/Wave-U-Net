@@ -13,7 +13,6 @@ import Evaluate
 
 import functools
 from tensorflow import signal
-import pdb
 import h5py
 
 ex = Experiment('Waveunet Training', ingredients=[config_ingredient])
@@ -49,6 +48,7 @@ def train(model_config, experiment_id, load_model=None):
         out_shape  = (model_config["batch_size"], model_config["num_frames"],1)
         out_shapes = {'soprano':out_shape,'alto':out_shape,'tenor':out_shape,'bass':out_shape, 'mix':out_shape}
         out_types = {k: tf.float32 for k in out_shapes}
+        use_case = 1 # Change this argument to control number of allowed singer (0:1 at most, 1: 1 at least)
 
         batchGen = Datasets.SATBBatchGenerator
         dataset = tf.data.Dataset.from_generator(
@@ -57,7 +57,7 @@ def train(model_config, experiment_id, load_model=None):
             output_shapes=out_shapes, 
             args=([model_config["hdf5_filepath"],
                 model_config["batch_size"],
-                model_config["num_frames"]]))
+                model_config["num_frames"],use_case]))
         iterator = dataset.make_one_shot_iterator()
         batch = iterator.get_next()
 
@@ -73,7 +73,6 @@ def train(model_config, experiment_id, load_model=None):
     for key in model_config["source_names"]:
         real_source = batch[key]
         sep_source = separator_sources[key]
-        import pdb; pdb.set_trace()
         if model_config["network"] == "unet_spectrogram" and not model_config["raw_audio_loss"]:
             window = functools.partial(signal.hann_window, periodic=True)
             stfts = tf.contrib.signal.stft(tf.squeeze(real_source, 2), frame_length=1024, frame_step=768,
@@ -82,7 +81,6 @@ def train(model_config, experiment_id, load_model=None):
             separator_loss += tf.reduce_mean(tf.abs(real_mag - sep_source))
         else:
             separator_loss += tf.reduce_mean(tf.square(real_source - sep_source))
-    breakpoint()
     separator_loss = separator_loss / float(model_config["num_sources"]) # Normalise by number of sources
 
     # TRAINING CONTROL VARIABLES
@@ -94,18 +92,15 @@ def train(model_config, experiment_id, load_model=None):
     print("Sep_Vars: " + str(Utils.getNumParams(separator_vars)))
     print("Num of variables" + str(len(tf.global_variables())))
 
-    breakpoint()
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
         with tf.variable_scope("separator_solver"):
             separator_solver = tf.train.AdamOptimizer(learning_rate=model_config["init_sup_sep_lr"]).minimize(separator_loss, var_list=separator_vars)
 
-    breakpoint()
     # SUMMARIES
     tf.summary.scalar("sep_loss", separator_loss, collections=["sup"])
     sup_summaries = tf.summary.merge_all(key='sup')
 
-    breakpoint()
     # Start session and queue input threads
     config = tf.ConfigProto()
     config.gpu_options.allow_growth=True
@@ -113,7 +108,6 @@ def train(model_config, experiment_id, load_model=None):
     sess.run(tf.global_variables_initializer())
     writer = tf.summary.FileWriter(model_config["log_dir"] + os.path.sep + str(experiment_id),graph=sess.graph)
 
-    breakpoint()
     # CHECKPOINTING
     # Load pretrained model to continue training, if we are supposed to
     if load_model != None:
@@ -124,7 +118,6 @@ def train(model_config, experiment_id, load_model=None):
 
     saver = tf.train.Saver(tf.global_variables(), write_version=tf.train.SaverDef.V2)
 
-    breakpoint()
     # Start training loop
     _global_step = sess.run(global_step)
     _init_step = _global_step
@@ -136,7 +129,6 @@ def train(model_config, experiment_id, load_model=None):
         # Increment step counter, check if maximum iterations per epoch is achieved and stop in that case
         _global_step = sess.run(increment_global_step)
 
-    breakpoint()
     # Epoch finished - Save model
     print("Finished epoch!")
     save_path = saver.save(sess, model_config["model_base_dir"] + os.path.sep + str(experiment_id) + os.path.sep + str(experiment_id), global_step=int(_global_step))

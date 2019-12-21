@@ -13,6 +13,7 @@ import os
 import tensorflow as tf
 import musdb
 import h5py
+from itertools import chain
 
 def take_random_snippets(sample, keys, input_shape, num_samples):
     # Take a sample (collection of audio files) and extract snippets from it at a number of random positions
@@ -284,7 +285,7 @@ def createSATBDataset(database_path, model_config):
     tracks = list()
 
     # Get all the stem files
-    tracks = glob.glob(database_path+"/*.wav")
+    tracks = glob.glob(database_path+"/*.wav",recursive=False)
 
     h5file = h5py.File(model_config["hdf5_filepath"], "w")
 
@@ -311,39 +312,63 @@ def createSATBDataset(database_path, model_config):
 
     h5file.close()
 
-def SATBBatchGenerator(hdf5_filepath, batch_size, num_frames):
+def SATBBatchGenerator(hdf5_filepath, batch_size, num_frames, use_case=0):
 
     dataset = h5py.File(hdf5_filepath, "r")
-
-    # 1. Choose random song
-    randsong = random.choice(list(dataset['soprano1'].keys()))
-    sources = ['soprano','alto','tenor','bass']
-
-    startspl = 0
-    endspl   = 0
-
-    out_shape  = np.zeros((batch_size, num_frames,1))
-    out_shapes = {'soprano':out_shape,'alto':out_shape,'tenor':out_shape,'bass':out_shape, 'mix':out_shape}    
-    ls = {}
+    itCounter = 0
 
     while True:
+
+        itCounter = itCounter + 1
+        print('Iteration '+str(itCounter))
+        # 1. Choose random song (we get it from a random part: here soprano1)
+        randsong = random.choice(list(dataset['soprano1'].keys()))
+        sources = ['soprano','alto','tenor','bass']
+
+        startspl = 0
+        endspl   = 0
+
+        out_shape  = np.zeros((batch_size, num_frames,1))
+        out_shapes = {'soprano':np.copy(out_shape),'alto':np.copy(out_shape),'tenor':np.copy(out_shape),'bass':np.copy(out_shape), 'mix':np.copy(out_shape)}
+
         for i in range(batch_size):
+
+            # Use-Cases
+            if (use_case==0):
+                max_num_singer_per_part = 1
+                randsources = random.sample(sources, random.randint(1,len(sources)))                   # Randomize source pick if at most one singer per part
+            else:
+                max_num_singer_per_part = 4
+                randsources = sources                                                                  # Take all sources if at least one singer per part   
+
             # Get Start and End samples
-            startspl = random.randint(0,len(dataset['soprano1'][randsong]['raw_wav'])-num_frames)
+            startspl = random.randint(0,len(dataset['soprano1'][randsong]['raw_wav'])-num_frames)      # This assume that all stems are the same length
             endspl   = startspl+num_frames
-            # Get 1-4 Sources
-            randsources = random.sample(sources, random.randint(1,len(sources)))
-            # Retrieve chunks for each selected source and stack them
-            mix_audio = np.zeros(num_frames)
+
+            # Get Random Sources:                                                            
+            num_sources = [random.randint(1,max_num_singer_per_part) for _ in range(len(randsources))] # Get random number of singer per part
+            part_number = [random.sample(range(1,5), x) for x in num_sources]                          # Get random part number
+            part_number = list(chain.from_iterable(part_number))                                       # Flatten the part number (so its easier to concatenate)
+            randsources = np.repeat(randsources,num_sources)                                           # Repeat the parts according to the number of singer per group
+            randsources = ["{}{}".format(a_, b_) for a_, b_ in zip(randsources, part_number)]          # Concatenate strings for part name
+
+            # Retrieve the chunks and store them in output shapes                                         
             for source in randsources:
-                source_num = source+str(random.randint(1,4)) # Add random number to part (1-4)
-                source_chunk = dataset[source_num][randsong]['raw_wav'][startspl:endspl] # Retrieve part's chunk
-                out_shapes[source][i] = source_chunk[..., np.newaxis] # Store chunk in output shapes
-                mix_audio = np.add(mix_audio,source_chunk) # Add the chunk to the mix
+                source_chunk = dataset[source][randsong]['raw_wav'][startspl:endspl]                         # Retrieve part's chunk
+                #print(randsong+', '+source+', '+str(len(source_chunk))+', '+str(startspl)+', '+str(endspl))
+                out_shapes[source[:-1]][i] = np.add(out_shapes[source[:-1]][i],source_chunk[..., np.newaxis])# Store chunk in output shapes
+                out_shapes['mix'][i] = np.add(out_shapes['mix'][i],source_chunk[..., np.newaxis])            # Add the chunk to the mix
             
-            mix_audio = mix_audio[..., np.newaxis]
-            out_shapes['mix'][i] = (mix_audio/len(randsources)) # Scale down mix
-            yield out_shapes
+            # Scale down all the group chunks based off number of sources per group
+            if max_num_singer_per_part > 1:
+                out_shapes['soprano'][i] = (out_shapes['soprano'][i]/num_sources[0])
+                out_shapes['alto'][i]    = (out_shapes['tenor'][i]/num_sources[1])
+                out_shapes['tenor'][i]   = (out_shapes['alto'][i]/num_sources[2])
+                out_shapes['bass'][i]    = (out_shapes['bass'][i]/num_sources[3])
+
+            out_shapes['mix'][i] = (out_shapes['mix'][i]/len(randsources)) # Scale down mix
+
+        yield out_shapes
 
 
 def getCCMixter(xml_path):
