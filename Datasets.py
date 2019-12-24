@@ -280,39 +280,59 @@ def getMUSDB(database_path):
 
     return subsets
 
-def createSATBDataset(database_path, model_config):
+def createSATBDataset(model_config):
 
-    tracks = list()
+    tracks = dict()
 
     # Get all the stem files
-    tracks = glob.glob(database_path+"/*.wav",recursive=False)
+    dsd_train = glob.glob(model_config['satb_path_train']+"/*.wav",recursive=False)                                                              # Get entirety of training set
+    songs = set([os.path.splitext(os.path.basename(i))[0].split('_')[1] for i in dsd_train])                                # Extract only songs from name
+    val_songs = random.sample(songs, int(np.ceil(0.2*len(songs))))                                                          # Take 20% of all the songs in training set
+    val_idx   = [int(i) for i, track in enumerate(dsd_train) if [True for song in val_songs if str('_'+song+'_') in track]] # get indices of all validation song stems
+    train_idx = [i for i in range(len(dsd_train)) if i not in val_idx]                                                      # Get all files from training set that are not part of valid set
+
+    tracks['train'] = np.take(dsd_train, train_idx)
+    tracks['valid'] = np.take(dsd_train, val_idx)
+    tracks['test']  = glob.glob(model_config["satb_path_test"]+"/*.wav",recursive=False)
 
     h5file = h5py.File(model_config["hdf5_filepath"], "w")
 
-    # Write stems to hdf5 file
-    for track in tracks:
+    # Write stems to hdf5 file for train/valid/test partitions
+    for curr_partition in ["train", "valid", "test"]:
 
-        filename = os.path.splitext(os.path.basename(track))[0].split('_')
+        print("Writing " + curr_partition + " partition...")
 
-        song = filename[1]
-        part = ''.join(filename[2:4])
+        # Shuffle sample order
+        stem_list = tracks[curr_partition]
+        random.shuffle(stem_list)
 
-        # Create group if needed
-        if not str("/"+part) in h5file:
-            grp  = h5file.create_group(part)
+        # Create group for set
+        if not str(curr_partition) in h5file:
+            set_grp  = h5file.create_group(curr_partition)
 
-        if not str("/"+part+'/'+song) in h5file:
-            grp = h5file[str("/"+part)]
-            subgrp  = grp.create_group(song)
+        for track in stem_list:
 
-        # Once group/subgroup are created, store file
-        audio,fs = soundfile.read(track)
-        subgrp = h5file[str("/"+part+'/'+song)]
-        subgrp.create_dataset("raw_wav",data=audio)
+            filename = os.path.splitext(os.path.basename(track))[0].split('_')
+
+            song = filename[1]
+            part = ''.join(filename[2:4])
+
+            # Create group if needed
+            if not str(curr_partition+'/'+part) in h5file:
+                part_grp  = set_grp.create_group(part)
+
+            if not str(curr_partition+'/'+part+'/'+song) in h5file:
+                part_grp = h5file[str(curr_partition+'/'+part)]
+                subgrp  = part_grp.create_group(song)
+
+            # Once group/subgroup are created, store file
+            audio,fs = soundfile.read(track)
+            subgrp = h5file[str(curr_partition+'/'+part+'/'+song)]
+            subgrp.create_dataset("raw_wav",data=audio)
 
     h5file.close()
 
-def SATBBatchGenerator(hdf5_filepath, batch_size, num_frames, use_case=0):
+def SATBBatchGenerator(hdf5_filepath, batch_size, num_frames, use_case=0, partition='train'):
 
     dataset = h5py.File(hdf5_filepath, "r")
     itCounter = 0
@@ -322,7 +342,7 @@ def SATBBatchGenerator(hdf5_filepath, batch_size, num_frames, use_case=0):
         itCounter = itCounter + 1
         print('Iteration '+str(itCounter))
         # 1. Choose random song (we get it from a random part: here soprano1)
-        randsong = random.choice(list(dataset['soprano1'].keys()))
+        randsong = random.choice(list(dataset[partition]['soprano1'].keys()))
         sources = ['soprano','alto','tenor','bass']
 
         startspl = 0
@@ -342,7 +362,7 @@ def SATBBatchGenerator(hdf5_filepath, batch_size, num_frames, use_case=0):
                 randsources = sources                                                                  # Take all sources if at least one singer per part   
 
             # Get Start and End samples
-            startspl = random.randint(0,len(dataset['soprano1'][randsong]['raw_wav'])-num_frames)      # This assume that all stems are the same length
+            startspl = random.randint(0,len(dataset[partition]['soprano1'][randsong]['raw_wav'])-num_frames) # This assume that all stems are the same length
             endspl   = startspl+num_frames
 
             # Get Random Sources:                                                            
@@ -354,7 +374,7 @@ def SATBBatchGenerator(hdf5_filepath, batch_size, num_frames, use_case=0):
 
             # Retrieve the chunks and store them in output shapes                                         
             for source in randsources:
-                source_chunk = dataset[source][randsong]['raw_wav'][startspl:endspl]                         # Retrieve part's chunk
+                source_chunk = dataset[partition][source][randsong]['raw_wav'][startspl:endspl]                         # Retrieve part's chunk
                 #print(randsong+', '+source+', '+str(len(source_chunk))+', '+str(startspl)+', '+str(endspl))
                 out_shapes[source[:-1]][i] = np.add(out_shapes[source[:-1]][i],source_chunk[..., np.newaxis])# Store chunk in output shapes
                 out_shapes['mix'][i] = np.add(out_shapes['mix'][i],source_chunk[..., np.newaxis])            # Add the chunk to the mix

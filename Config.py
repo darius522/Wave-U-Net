@@ -9,14 +9,15 @@ def cfg():
     model_config = {"musdb_path" : "./data/musdb18", # SET MUSDB PATH HERE, AND SET CCMIXTER PATH IN CCMixter.xml
                     "estimates_path" : "/mnt/windaten/Source_Estimates", # SET THIS PATH TO WHERE YOU WANT SOURCE ESTIMATES PRODUCED BY THE TRAINED MODEL TO BE SAVED. Folder itself must exist!
                     "data_path" : "data", # Set this to where the preprocessed dataset should be saved
-                    "satb_path" : "./data/satb/singingds/norm", # SET SATB PATH HERE
+                    "satb_path_train" : "./data/satb/singingds/norm/train", # SET SATB PATH HERE
+                    "satb_path_test" : "./data/satb/singingds/norm/test", # SET SATB PATH HERE
                     "hdf5_filepath" : "./satb_dataset.hdf5",
 
                     "model_base_dir" : "checkpoints", # Base folder for model checkpoints
                     "log_dir" : "logs", # Base folder for logs files
-                    "batch_size" : 16, # Batch size
+                    "batch_size" : 4, # Batch size
                     "init_sup_sep_lr" : 1e-4, # Supervised separator learning rate
-                    "epoch_it" : 2000, # Number of supervised separator steps per epoch
+                    "epoch_it" : 20, # Number of supervised separator steps per epoch
                     'cache_size': 4000, # Number of audio snippets buffered in the random shuffle queue. Larger is better, since workers put multiple examples of one song into this queue. The number of different songs that is sampled from with each batch equals cache_size / num_snippets_per_track. Set as high as your RAM allows.
                     'num_workers' : 4, # Number of processes used for each TF map operation used when loading the dataset
                     "num_snippets_per_track" : 100, # Number of snippets that should be extracted from each song at a time after loading it. Higher values make data loading faster, but can reduce the batches song diversity

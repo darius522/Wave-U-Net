@@ -30,7 +30,10 @@ def test(model_config, partition, model_folder, load_model):
         iterator = dataset.make_one_shot_iterator()
         batch = iterator.get_next()
     else:
-        Datasets.createSATBDataset(model_config["satb_path"],model_config)
+
+        if not os.path.isfile(model_config["hdf5_filepath"]): 
+            breakpoint(); 
+            Datasets.createSATBDataset(model_config)
 
         dataset = h5py.File(model_config["hdf5_filepath"], "r")
         out_shape  = (model_config["batch_size"], model_config["num_frames"],1)
@@ -45,7 +48,9 @@ def test(model_config, partition, model_folder, load_model):
             output_shapes=out_shapes, 
             args=([model_config["hdf5_filepath"],
                 model_config["batch_size"],
-                model_config["num_frames"],use_case]))
+                model_config["num_frames"],
+                use_case,
+                partition]))
         iterator = dataset.make_one_shot_iterator()
         batch = iterator.get_next()
 
