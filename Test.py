@@ -32,7 +32,6 @@ def test(model_config, partition, model_folder, load_model):
     else:
 
         if not os.path.isfile(model_config["hdf5_filepath"]): 
-            breakpoint(); 
             Datasets.createSATBDataset(model_config)
 
         dataset = h5py.File(model_config["hdf5_filepath"], "r")

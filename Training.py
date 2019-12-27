@@ -42,8 +42,8 @@ def train(model_config, experiment_id, load_model=None):
         iterator = dataset.make_one_shot_iterator()
         batch = iterator.get_next()
     else:
-        
-        if not os.path.isfile(model_config["hdf5_filepath"]):  
+
+        if not os.path.isfile(model_config["hdf5_filepath"]):
             Datasets.createSATBDataset(model_config)
 
         dataset = h5py.File(model_config["hdf5_filepath"], "r")

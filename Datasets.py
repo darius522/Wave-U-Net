@@ -14,6 +14,7 @@ import tensorflow as tf
 import musdb
 import h5py
 from itertools import chain
+from matplotlib import pyplot as plt
 
 def take_random_snippets(sample, keys, input_shape, num_samples):
     # Take a sample (collection of audio files) and extract snippets from it at a number of random positions
