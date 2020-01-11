@@ -11,7 +11,9 @@ def cfg():
                     "data_path" : "data", # Set this to where the preprocessed dataset should be saved
                     "satb_path_train" : "./data/satb/singingds/norm/train", # SET SATB PATH HERE
                     "satb_path_test" : "./data/satb/singingds/norm/test", # SET SATB PATH HERE
-                    "hdf5_filepath" : "./satb_dataset.hdf5",
+                    "satb_hdf5_filepath" : "./satb_dataset.hdf5",
+                    'satb_debug' : True,
+                    'satb_use_case' : 0,
 
                     "model_base_dir" : "checkpoints", # Base folder for model checkpoints
                     "log_dir" : "logs", # Base folder for logs files

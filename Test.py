@@ -31,24 +31,23 @@ def test(model_config, partition, model_folder, load_model):
         batch = iterator.get_next()
     else:
 
-        if not os.path.isfile(model_config["hdf5_filepath"]): 
+        if not os.path.isfile(model_config["satb_hdf5_filepath"]): 
             Datasets.createSATBDataset(model_config)
 
-        dataset = h5py.File(model_config["hdf5_filepath"], "r")
+        dataset = h5py.File(model_config["satb_hdf5_filepath"], "r")
         out_shape  = (model_config["batch_size"], model_config["num_frames"],1)
         out_shapes = {'soprano':out_shape,'alto':out_shape,'tenor':out_shape,'bass':out_shape, 'mix':out_shape}
         out_types = {k: tf.float32 for k in out_shapes}
-        use_case = 1 # Change this argument to control number of allowed singer per part (0:1 at most, 1: 1 exactly, 2: 1 at least)
 
         batchGen = Datasets.SATBBatchGenerator
         dataset = tf.data.Dataset.from_generator(
             batchGen, 
             output_types=out_types, 
             output_shapes=out_shapes, 
-            args=([model_config["hdf5_filepath"],
+            args=([model_config["satb_hdf5_filepath"],
                 model_config["batch_size"],
                 model_config["num_frames"],
-                use_case,
+                model_config["satb_use_case"],
                 partition]))
         iterator = dataset.make_one_shot_iterator()
         batch = iterator.get_next()

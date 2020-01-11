@@ -298,7 +298,7 @@ def createSATBDataset(model_config):
     tracks['valid'] = np.take(dsd_train, val_idx)
     tracks['test']  = glob.glob(model_config["satb_path_test"]+"/*.wav",recursive=False)
 
-    h5file = h5py.File(model_config["hdf5_filepath"], "w")
+    h5file = h5py.File(model_config["satb_hdf5_filepath"], "w")
 
     # Write stems to hdf5 file for train/valid/test partitions
     for curr_partition in ["train", "valid", "test"]:
@@ -336,9 +336,8 @@ def createSATBDataset(model_config):
 
 
     h5file.close()
-    print('done resampling')
 
-def SATBBatchGenerator(hdf5_filepath, batch_size, num_frames, use_case=0, partition='train'):
+def SATBBatchGenerator(hdf5_filepath, batch_size, num_frames, use_case=0, partition='train', resampling_fs=22050, debug=False):
 
     dataset = h5py.File(hdf5_filepath, "r")
     itCounter = 0
@@ -398,6 +397,15 @@ def SATBBatchGenerator(hdf5_filepath, batch_size, num_frames, use_case=0, partit
                 out_shapes['bass'][i]    = (out_shapes['bass'][i]/num_sources[3])
 
             out_shapes['mix'][i] = (out_shapes['mix'][i]/len(randsources)) # Scale down mix
+        
+        if debug==True:
+            if partition.decode("utf-8")=='train':
+                rand_pick = random.randint(0,batch_size-1)
+                debug_dir = './debug/it#'+str(itCounter)+'_batchpick#'+str(rand_pick)
+                if not os.path.isdir(debug_dir):
+                    os.mkdir(debug_dir)
+                for source in sources:
+                    soundfile.write(debug_dir+'/'+source+'.wav', out_shapes[source][rand_pick], resampling_fs, 'PCM_24')
 
         yield out_shapes
 
