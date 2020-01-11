@@ -38,7 +38,7 @@ def test(model_config, partition, model_folder, load_model):
         out_shape  = (model_config["batch_size"], model_config["num_frames"],1)
         out_shapes = {'soprano':out_shape,'alto':out_shape,'tenor':out_shape,'bass':out_shape, 'mix':out_shape}
         out_types = {k: tf.float32 for k in out_shapes}
-        use_case = 1 # Change this argument to control number of allowed singer (0:1 at most, 1: 1 at least)
+        use_case = 1 # Change this argument to control number of allowed singer per part (0:1 at most, 1: 1 exactly, 2: 1 at least)
 
         batchGen = Datasets.SATBBatchGenerator
         dataset = tf.data.Dataset.from_generator(

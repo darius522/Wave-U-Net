@@ -333,7 +333,7 @@ def createSATBDataset(model_config):
             audio, s = librosa.load(track, sr=resampling_fs)
             subgrp = h5file[str(curr_partition+'/'+part+'/'+song)]
             subgrp.create_dataset("raw_wav",data=audio)
-            
+
 
     h5file.close()
     print('done resampling')
@@ -359,13 +359,18 @@ def SATBBatchGenerator(hdf5_filepath, batch_size, num_frames, use_case=0, partit
 
         for i in range(batch_size):
 
-            # Use-Cases
+            # Use-Case: At most one singer per part
             if (use_case==0):
                 max_num_singer_per_part = 1
                 randsources = random.sample(sources, random.randint(1,len(sources)))                   # Randomize source pick if at most one singer per part
+            # Use-Case: Exactly one singer per part
+            elif (use_case==1):
+                max_num_singer_per_part = 1
+                randsources = sources                                                                  # Take all sources + Set num singer = 1
+            # Use-Case: At least one singer per part
             else:
                 max_num_singer_per_part = 4
-                randsources = sources                                                                  # Take all sources if at least one singer per part   
+                randsources = sources                                                                  # Take all sources + Set max num of singer = 4  
 
             # Get Start and End samples
             startspl = random.randint(0,len(dataset[partition]['soprano1'][randsong]['raw_wav'])-num_frames) # This assume that all stems are the same length
