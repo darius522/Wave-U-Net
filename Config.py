@@ -28,7 +28,7 @@ def cfg():
                     'output_filter_size': 1, # For Wave-U-Net: Filter size of first convolution in first downsampling block
                     'num_initial_filters' : 24, # Number of filters for convolution in first layer of network
                     "num_frames": 16384, # DESIRED number of time frames in the output waveform per samples (could be changed when using valid padding)
-                    'expected_sr': 44100,  # Downsample all audio input to this sampling rate
+                    'expected_sr': 22050,  # Downsample all audio input to this sampling rate
                     'mono_downmix': True,  # Whether to downsample the audio input
                     'output_type' : 'direct', # Type of output layer, either "direct" or "difference". Direct output: Each source is result of tanh activation and independent. DIfference: Last source output is equal to mixture input - sum(all other sources)
                     'output_activation' : 'tanh', # Activation function for output layer. "tanh" or "linear". Linear output involves clipping to [-1,1] at test time, and might be more stable than tanh

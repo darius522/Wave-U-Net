@@ -15,6 +15,7 @@ import musdb
 import h5py
 from itertools import chain
 from matplotlib import pyplot as plt
+from scipy.signal import resample
 
 def take_random_snippets(sample, keys, input_shape, num_samples):
     # Take a sample (collection of audio files) and extract snippets from it at a number of random positions
@@ -284,6 +285,7 @@ def getMUSDB(database_path):
 def createSATBDataset(model_config):
 
     tracks = dict()
+    resampling_fs = model_config['expected_sr']
 
     # Get all the stem files
     dsd_train = glob.glob(model_config['satb_path_train']+"/*.wav",recursive=False)                                                              # Get entirety of training set
@@ -311,6 +313,7 @@ def createSATBDataset(model_config):
         if not str(curr_partition) in h5file:
             set_grp  = h5file.create_group(curr_partition)
 
+        print('resampling tracks at '+str(resampling_fs))
         for track in stem_list:
 
             filename = os.path.splitext(os.path.basename(track))[0].split('_')
@@ -327,11 +330,13 @@ def createSATBDataset(model_config):
                 subgrp  = part_grp.create_group(song)
 
             # Once group/subgroup are created, store file
-            audio,fs = soundfile.read(track)
+            audio, s = librosa.load(track, sr=resampling_fs)
             subgrp = h5file[str(curr_partition+'/'+part+'/'+song)]
             subgrp.create_dataset("raw_wav",data=audio)
+            
 
     h5file.close()
+    print('done resampling')
 
 def SATBBatchGenerator(hdf5_filepath, batch_size, num_frames, use_case=0, partition='train'):
 
