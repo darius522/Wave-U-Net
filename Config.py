@@ -7,19 +7,19 @@ config_ingredient = Ingredient("cfg")
 def cfg():
     # Base configuration
     model_config = {"musdb_path" : "./data/musdb18", # SET MUSDB PATH HERE, AND SET CCMIXTER PATH IN CCMixter.xml
-                    "estimates_path" : "/mnt/windaten/Source_Estimates", # SET THIS PATH TO WHERE YOU WANT SOURCE ESTIMATES PRODUCED BY THE TRAINED MODEL TO BE SAVED. Folder itself must exist!
+                    "estimates_path" : "./Source_Estimates", # SET THIS PATH TO WHERE YOU WANT SOURCE ESTIMATES PRODUCED BY THE TRAINED MODEL TO BE SAVED. Folder itself must exist!
                     "data_path" : "data", # Set this to where the preprocessed dataset should be saved
-                    "satb_path_train" : "./data/satb/singingds/norm/train", # SET SATB PATH HERE
-                    "satb_path_test" : "./data/satb/singingds/norm/test", # SET SATB PATH HERE
+                    "satb_path_train" : "../data/satb_dst/train/raw_audio", # SET SATB PATH HERE
+                    "satb_path_test" : "../data/satb_dst/test/raw_audio", # SET SATB PATH HERE
                     "satb_hdf5_filepath" : "./satb_dataset.hdf5",
-                    'satb_debug' : True,
-                    'satb_use_case' : 0,
+                    'satb_debug' : False,
+                    'satb_use_case' : 1, #0: At most, 1: Exactly, 2: At least
 
                     "model_base_dir" : "checkpoints", # Base folder for model checkpoints
                     "log_dir" : "logs", # Base folder for logs files
-                    "batch_size" : 4, # Batch size
+                    "batch_size" : 16, # Batch size
                     "init_sup_sep_lr" : 1e-4, # Supervised separator learning rate
-                    "epoch_it" : 20, # Number of supervised separator steps per epoch
+                    "epoch_it" : 2000, # Number of supervised separator steps per epoch
                     'cache_size': 4000, # Number of audio snippets buffered in the random shuffle queue. Larger is better, since workers put multiple examples of one song into this queue. The number of different songs that is sampled from with each batch equals cache_size / num_snippets_per_track. Set as high as your RAM allows.
                     'num_workers' : 4, # Number of processes used for each TF map operation used when loading the dataset
                     "num_snippets_per_track" : 100, # Number of snippets that should be extracted from each song at a time after loading it. Higher values make data loading faster, but can reduce the batches song diversity
@@ -40,7 +40,7 @@ def cfg():
                     'task' : 'satb', # Type of separation task. 'voice' : Separate music into voice and accompaniment. 'multi_instrument': Separate music into guitar, bass, vocals, drums and other (Sisec)
                     'augmentation' : True, # Random attenuation of source signals to improve generalisation performance (data augmentation)
                     'raw_audio_loss' : True, # Only active for unet_spectrogram network. True: L2 loss on audio. False: L1 loss on spectrogram magnitudes for training and validation and test loss
-                    'worse_epochs' : 1, # Patience for early stoppping on validation set
+                    'worse_epochs' : 20, # Patience for early stoppping on validation set
                     }
     experiment_id = np.random.randint(0,1000000)
 
@@ -147,9 +147,9 @@ def unet_spectrogram():
 
         "network" : "unet_spectrogram",
         "num_layers" : 6,
-        "expected_sr" : 8192,
-        "num_frames" : 768 * 127 + 1024, # hop_size * (time_frames_of_spectrogram_input - 1) + fft_length
-        "duration" : 13,
+        "expected_sr" : 22050,
+        "num_frames" : 256 * 127 + 1024, # hop_size * (time_frames_of_spectrogram_input - 1) + fft_length
+        #"duration" : 13,
         "num_initial_filters" : 16
     }
 
@@ -160,9 +160,9 @@ def unet_spectrogram_l1():
 
         "network" : "unet_spectrogram",
         "num_layers" : 6,
-        "expected_sr" : 8192,
-        "num_frames" : 768 * 127 + 1024, # hop_size * (time_frames_of_spectrogram_input - 1) + fft_length
-        "duration" : 13,
+        "expected_sr" : 22050,
+        "num_frames" : 256 * 127 + 1024, # hop_size * (time_frames_of_spectrogram_input - 1) + fft_length
+        #"duration" : 13,
         "num_initial_filters" : 16,
-        "raw_audio_loss" : False
+        "raw_audio_loss" : False,
     }

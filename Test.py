@@ -87,7 +87,7 @@ def test(model_config, partition, model_folder, load_model):
 
         if model_config["network"] == "unet_spectrogram" and not model_config["raw_audio_loss"]:
             window = functools.partial(sig.hann_window, periodic=True)
-            stfts = tf.contrib.signal.stft(tf.squeeze(real_source, 2), frame_length=1024, frame_step=768,
+            stfts = tf.contrib.signal.stft(tf.squeeze(real_source, 2), frame_length=1024, frame_step=256,
                                            fft_length=1024, window_fn=window)
             real_mag = tf.abs(stfts)
             separator_loss += tf.reduce_mean(tf.abs(real_mag - sep_source))
@@ -95,13 +95,12 @@ def test(model_config, partition, model_folder, load_model):
             separator_loss += tf.reduce_mean(tf.square(real_source - sep_source))
     separator_loss = separator_loss / float(model_config["num_sources"])  # Normalise by number of sources
 
-    while True:
-        try:
-            curr_loss = sess.run(separator_loss)
-            total_loss = total_loss + (1.0 / float(batch_num)) * (curr_loss - total_loss)
-            batch_num += 1
-        except tf.errors.OutOfRangeError as e:
-            break
+    count = 0
+    while (count < 200):  
+        curr_loss = sess.run(separator_loss)
+        total_loss = total_loss + (1.0 / float(batch_num)) * (curr_loss - total_loss)
+        batch_num += 1
+        count += 1
 
     summary = tf.Summary(value=[tf.Summary.Value(tag="test_loss", simple_value=total_loss)])
     writer.add_summary(summary, global_step=_global_step)

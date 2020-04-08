@@ -12,7 +12,7 @@ import Test
 import Evaluate
 
 import functools
-from tensorflow import signal
+import tensorflow.contrib.signal as sig
 import h5py
 from matplotlib import pyplot as plt
 
@@ -87,8 +87,8 @@ def train(model_config, experiment_id, load_model=None):
         real_source = batch[key]
         sep_source = separator_sources[key]
         if model_config["network"] == "unet_spectrogram" and not model_config["raw_audio_loss"]:
-            window = functools.partial(signal.hann_window, periodic=True)
-            stfts = tf.contrib.signal.stft(tf.squeeze(real_source, 2), frame_length=1024, frame_step=768,
+            window = functools.partial(sig.hann_window, periodic=True)
+            stfts = tf.contrib.signal.stft(tf.squeeze(real_source, 2), frame_length=1024, frame_step=256,
                                            fft_length=1024, window_fn=window)
             real_mag = tf.abs(stfts)
             separator_loss += tf.reduce_mean(tf.abs(real_mag - sep_source))

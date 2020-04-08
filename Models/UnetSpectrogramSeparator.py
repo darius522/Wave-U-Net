@@ -21,12 +21,12 @@ class UnetSpectrogramSeparator:
         self.mono = model_config["mono_downmix"]
         self.source_names = model_config["source_names"]
 
-        assert(len(self.source_names) == 2) # Only use for acc/voice separation for now, since model gets too big otherwise
+        #assert(len(self.source_names) == 2) # Only use for acc/voice separation for now, since model gets too big otherwise
         assert(self.mono) # Only mono
 
         # Spectrogram settings
         self.frame_len = 1024
-        self.hop = 768
+        self.hop = 256
 
     def get_padding(self, shape):
         '''
